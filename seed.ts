@@ -102,7 +102,7 @@ function seed() {
     }
 
     console.log("\n🚀 ContentPay API ready.");
-    console.log("   Demo user:    user_demo   / api_key: user_demo_key   ($50.00 pre-loaded)");
+    console.log("   Demo user:    user_demo   / api_key: user_demo_key   ($0.00 — resets on restart)");
     console.log("   Demo creator: creator_demo / api_key: creator_demo_key");
     console.log("   Demo media:   media_demo   ($5.00 flat)");
     console.log("   Timed media:  media_game   ($0.15 entry + $0.20/min, billed every 10s)");
