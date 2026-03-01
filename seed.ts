@@ -28,17 +28,20 @@ function seed() {
         console.log("✅ Demo creator created (api_key: creator_demo_key)");
     }
 
-    // Demo user (pre-loaded with $50 for smooth demo flow)
+    // Demo user — balance reset to $0 on every restart so Stripe card flow is always shown
     const existingUser = db.prepare("SELECT id FROM users WHERE id='user_demo'").get();
     if (!existingUser) {
         const walletId = `wallet_${uuidv4()}`;
         db.prepare("INSERT INTO wallets (id, owner_id, owner_type, balance) VALUES (?,?,?,?)").run(
-            walletId, "user_demo", "user", 50
+            walletId, "user_demo", "user", 0
         );
         db.prepare(`INSERT INTO users (id, name, email, api_key, wallet_id) VALUES (?,?,?,?,?)`).run(
             "user_demo", "Sam Chen", "sam@example.com", "user_demo_key", walletId
         );
-        console.log("✅ Demo user created (api_key: user_demo_key, balance: $50.00)");
+        console.log("✅ Demo user created (api_key: user_demo_key, balance: $0.00)");
+    } else {
+        db.prepare("UPDATE wallets SET balance = 0 WHERE owner_id = 'user_demo'").run();
+        console.log("✅ Demo user balance reset to $0.00");
     }
 
     // Demo media — flat pricing
