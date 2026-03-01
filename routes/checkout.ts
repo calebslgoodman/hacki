@@ -110,6 +110,9 @@ router.get("/modal", (req: Request, res: Response) => {
     .fund-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
     .fund-row label { font-size: 12px; color: #9ca3af; white-space: nowrap; }
     .fund-row input { flex: 1; background: #111827; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 8px 10px; color: #fff; font-size: 14px; }
+    .btn-phantom { background: linear-gradient(135deg,#14f195,#09b06a); color: #000; }
+    .btn-phantom:disabled { opacity: .4; cursor: not-allowed; }
+    #phantom-status { font-size: 12px; color: #9ca3af; margin-top: 8px; min-height: 16px; }
   </style>
 </head>
 <body>
@@ -143,7 +146,11 @@ router.get("/modal", (req: Request, res: Response) => {
           </div>
           <button class="btn btn-pay" id="fundBtn">Load funds & unlock</button>
         </div>
-        ` : '<p style="color:#f87171;font-size:13px;margin-top:12px;">Card payments not configured.</p>'}
+        ` : ''}
+        <div class="divider">or pay with Phantom</div>
+        <button class="btn btn-phantom" id="phantomBtn" onclick="connectAndPayPhantom()">🦋 Pay with Phantom (SOL)</button>
+        <div id="phantom-status"></div>
+        ${!stripeKey ? '<p style="color:#f87171;font-size:13px;margin-top:12px;">Card payments not configured.</p>' : ''}
       `}
 
       <button class="btn btn-cancel" onclick="window.parent.postMessage({type:'contentpay:cancel'},'*')">Cancel</button>
@@ -237,6 +244,121 @@ router.get("/modal", (req: Request, res: Response) => {
         btn.disabled = false; btn.textContent = 'Load funds & unlock';
       }
     });
+    ` : ''}
+
+    ${!canAfford ? `
+    // ── Phantom / Solana funding flow ─────────────────────────────────────────
+    function setPhantomStatus(msg, color) {
+      const el = document.getElementById('phantom-status');
+      el.style.color = color || '#9ca3af';
+      el.innerHTML = msg;
+    }
+
+    function loadSolanaLibs() {
+      if (window.solanaWeb3) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        window.global = window;
+        window.process = window.process || { env: {}, version: '' };
+        const buf = document.createElement('script');
+        buf.src = 'https://bundle.run/buffer@6.0.3';
+        buf.onload = () => {
+          window.Buffer = window.buffer.Buffer;
+          const web3 = document.createElement('script');
+          web3.src = 'https://unpkg.com/@solana/web3.js@1.95.8/lib/index.iife.min.js';
+          web3.onload = () => { window.solanaWeb3 = solanaWeb3; resolve(); };
+          web3.onerror = reject;
+          document.head.appendChild(web3);
+        };
+        buf.onerror = reject;
+        document.head.appendChild(buf);
+      });
+    }
+
+    async function connectAndPayPhantom() {
+      const btn = document.getElementById('phantomBtn');
+      const errEl = document.getElementById('errorMsg');
+      errEl.style.display = 'none';
+
+      if (!window.solana?.isPhantom) {
+        setPhantomStatus('Phantom not found. <a href="https://phantom.app" target="_blank" style="color:#14f195">Install Phantom →</a>', '#fbbf24');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '🦋 Connecting…';
+
+      try {
+        // 1. Connect Phantom wallet
+        const resp = await window.solana.connect();
+        const userPubkeyStr = resp.publicKey.toString();
+        setPhantomStatus('Connected: ' + userPubkeyStr.slice(0,4) + '…' + userPubkeyStr.slice(-4), '#14f195');
+
+        // 2. Load Solana web3.js
+        btn.textContent = '⏳ Loading…';
+        await loadSolanaLibs();
+
+        // 3. Get platform wallet + SOL price
+        const [cfgRes, priceRes] = await Promise.all([
+          fetch('/api/solana/config'),
+          fetch('/api/solana/price'),
+        ]);
+        const { wallet: platformWallet, network } = await cfgRes.json();
+        const { sol_usd: solPrice } = await priceRes.json();
+
+        const mediaPrice = ${media.price};
+        const solAmount  = mediaPrice / solPrice;
+
+        setPhantomStatus('Sending ' + solAmount.toFixed(6) + ' SOL (~$' + mediaPrice.toFixed(2) + ')…', '#a78bfa');
+        btn.textContent = '🦋 Approve in Phantom…';
+
+        // 4. Build + send SOL transfer
+        const web3 = window.solanaWeb3;
+        const connection  = new web3.Connection(network, 'confirmed');
+        const latestBlock = await connection.getLatestBlockhash();
+        const fromPubkey  = new web3.PublicKey(userPubkeyStr);
+        const tx = new web3.Transaction({
+          recentBlockhash: latestBlock.blockhash,
+          feePayer: fromPubkey,
+        }).add(web3.SystemProgram.transfer({
+          fromPubkey,
+          toPubkey: new web3.PublicKey(platformWallet),
+          lamports: Math.round(solAmount * web3.LAMPORTS_PER_SOL),
+        }));
+
+        const { signature } = await window.solana.signAndSendTransaction(tx);
+        setPhantomStatus('⏳ Confirming on Solana…', '#a78bfa');
+        btn.textContent = '⏳ Confirming…';
+
+        await connection.confirmTransaction({
+          signature,
+          blockhash: latestBlock.blockhash,
+          lastValidBlockHeight: latestBlock.lastValidBlockHeight,
+        });
+
+        // 5. Tell server to verify tx and credit balance
+        const depRes = await fetch('/api/solana/deposit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + USER_TOKEN },
+          body: JSON.stringify({ tx_signature: signature, expected_sol: solAmount }),
+        });
+        const dep = await depRes.json();
+        if (!depRes.ok) throw new Error(dep.error || 'Deposit failed');
+
+        setPhantomStatus('✅ $' + dep.usd_credited.toFixed(2) + ' credited — completing purchase…', '#14f195');
+
+        // 6. Complete the purchase
+        await doPurchase();
+      } catch(e) {
+        const msg = e.message || String(e);
+        if (msg.includes('rejected') || msg.includes('cancelled') || e.code === 4001) {
+          setPhantomStatus('Transaction cancelled.', '#fbbf24');
+        } else {
+          setPhantomStatus('Error: ' + msg, '#f87171');
+        }
+        btn.disabled = false;
+        btn.textContent = '🦋 Pay with Phantom (SOL)';
+      }
+    }
     ` : ''}
   </script>
 </body>
