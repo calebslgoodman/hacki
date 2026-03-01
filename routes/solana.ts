@@ -7,7 +7,7 @@ import { getUserFromToken } from "./auth";
 const router = Router();
 
 // ── Solana connection ─────────────────────────────────────────────────────────
-const SOLANA_NETWORK = "https://api.devnet.solana.com";
+const SOLANA_NETWORK = "https://api.mainnet-beta.solana.com";
 const connection = new Connection(SOLANA_NETWORK, "confirmed");
 
 // ── Platform Keypair ──────────────────────────────────────────────────────────
