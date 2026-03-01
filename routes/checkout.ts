@@ -297,13 +297,15 @@ router.get("/modal", (req: Request, res: Response) => {
         btn.textContent = '⏳ Loading…';
         await loadSolanaLibs();
 
-        // 3. Get platform wallet + SOL price
-        const [cfgRes, priceRes] = await Promise.all([
+        // 3. Get platform wallet, SOL price + blockhash — all server-proxied (avoids browser 403)
+        const [cfgRes, priceRes, blockRes] = await Promise.all([
           fetch('/api/solana/config'),
           fetch('/api/solana/price'),
+          fetch('/api/solana/blockhash'),
         ]);
-        const { wallet: platformWallet, network } = await cfgRes.json();
-        const { sol_usd: solPrice } = await priceRes.json();
+        const { wallet: platformWallet }          = await cfgRes.json();
+        const { sol_usd: solPrice }               = await priceRes.json();
+        const { blockhash, lastValidBlockHeight } = await blockRes.json();
 
         const mediaPrice = ${media.price};
         const solAmount  = mediaPrice / solPrice;
@@ -311,13 +313,11 @@ router.get("/modal", (req: Request, res: Response) => {
         setPhantomStatus('Sending ' + solAmount.toFixed(6) + ' SOL (~$' + mediaPrice.toFixed(2) + ')…', '#a78bfa');
         btn.textContent = '🦋 Approve in Phantom…';
 
-        // 4. Build + send SOL transfer
+        // 4. Build tx using server-supplied blockhash — no direct RPC from browser needed
         const web3 = window.solanaWeb3;
-        const connection  = new web3.Connection(network, 'confirmed');
-        const latestBlock = await connection.getLatestBlockhash();
-        const fromPubkey  = new web3.PublicKey(userPubkeyStr);
+        const fromPubkey = new web3.PublicKey(userPubkeyStr);
         const tx = new web3.Transaction({
-          recentBlockhash: latestBlock.blockhash,
+          recentBlockhash: blockhash,
           feePayer: fromPubkey,
         }).add(web3.SystemProgram.transfer({
           fromPubkey,
@@ -325,15 +325,10 @@ router.get("/modal", (req: Request, res: Response) => {
           lamports: Math.round(solAmount * web3.LAMPORTS_PER_SOL),
         }));
 
+        // Phantom signs + broadcasts; server will confirm on-chain via /api/solana/deposit
         const { signature } = await window.solana.signAndSendTransaction(tx);
-        setPhantomStatus('⏳ Confirming on Solana…', '#a78bfa');
-        btn.textContent = '⏳ Confirming…';
-
-        await connection.confirmTransaction({
-          signature,
-          blockhash: latestBlock.blockhash,
-          lastValidBlockHeight: latestBlock.lastValidBlockHeight,
-        });
+        setPhantomStatus('⏳ Verifying on Solana…', '#a78bfa');
+        btn.textContent = '⏳ Verifying…';
 
         // 5. Tell server to verify tx and credit balance
         const depRes = await fetch('/api/solana/deposit', {

@@ -58,6 +58,16 @@ router.get("/config", (_req: Request, res: Response) => {
     });
 });
 
+// ── GET /api/solana/blockhash — proxy latest blockhash (avoids browser 403) ──
+router.get("/blockhash", async (_req: Request, res: Response) => {
+    try {
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+        res.json({ blockhash, lastValidBlockHeight });
+    } catch (err: any) {
+        res.status(502).json({ error: "Failed to fetch blockhash.", detail: err.message });
+    }
+});
+
 // ── GET /api/solana/price — current SOL/USD price ─────────────────────────────
 router.get("/price", async (_req: Request, res: Response) => {
     const usd = await getSolPrice();
