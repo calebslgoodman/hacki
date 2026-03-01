@@ -24,7 +24,7 @@ app.use(cors());
 app.use(express.json());
 
 // Serve the SDK and demo site as static files
-app.use("/sdk",  express.static(path.join(__dirname, "..", "sdk")));
+app.use("/sdk",  express.static(path.join(__dirname, "sdk")));
 app.use("/demo", express.static(path.join(__dirname, "..", "demo")));
 app.use("/",     express.static(path.join(__dirname, "..", "frontend")));
 
