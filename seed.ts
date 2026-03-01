@@ -89,11 +89,13 @@ function seed() {
             "creator_demo",
             "Premium Baseball Analysis",
             "Step 4 — advanced directionality methodology, full confusion matrix, and feature engineering source code.",
-            2.00,
+            0.67,
             "https://calebgoodman.com/baseball#premium",
             ""
         );
-        console.log("✅ Baseball media created (id: media_baseball, price: $2.00 flat)");
+        console.log("✅ Baseball media created (id: media_baseball, price: $0.67 flat)");
+    } else {
+        db.prepare(`UPDATE media SET price=? WHERE id='media_baseball'`).run(0.67);
     }
 
     console.log("\n🚀 ContentPay API ready.");
@@ -101,7 +103,7 @@ function seed() {
     console.log("   Demo creator: creator_demo / api_key: creator_demo_key");
     console.log("   Demo media:   media_demo   ($5.00 flat)");
     console.log("   Timed media:  media_game   ($0.15 entry + $0.20/min, billed every 10s)");
-    console.log("   Baseball:     media_baseball ($2.00 flat — calebgoodman.com demo)\n");
+    console.log("   Baseball:     media_baseball ($0.67 flat — calebgoodman.com demo)\n");
 }
 
 export default seed;
