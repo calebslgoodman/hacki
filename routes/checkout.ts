@@ -71,11 +71,17 @@ router.get("/modal", (req: Request, res: Response) => {
   const user: any = db.prepare("SELECT u.*, w.balance FROM users u JOIN wallets w ON w.id=u.wallet_id WHERE u.id=?").get(cs.user_id);
   const canAfford = user.balance >= media.price;
 
+  const shortfall = +(media.price - user.balance).toFixed(2);
+  // Round up to nearest $0.50 increment, minimum $0.50 (Stripe floor)
+  const suggestedLoad = Math.max(0.50, Math.ceil(shortfall / 0.50) * 0.50);
+  const stripeKey = process.env.STRIPE_PUBLISHABLE_KEY || '';
+
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>ContentPay — Checkout</title>
+  ${stripeKey ? '<script src="https://js.stripe.com/v3/"></script>' : ''}
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f15; color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
@@ -96,6 +102,14 @@ router.get("/modal", (req: Request, res: Response) => {
     .btn-cancel { background: rgba(255,255,255,.05); color: #9ca3af; margin-top: 10px; border: 1px solid rgba(255,255,255,.08); }
     .error { color: #f87171; font-size: 13px; margin-top: 10px; display: none; }
     .success { text-align: center; display: none; }
+    .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: #4b5563; font-size: 12px; }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,.08); }
+    .fund-section { margin-top: 4px; }
+    .fund-label { font-size: 12px; color: #9ca3af; margin-bottom: 8px; }
+    #card-element { background: #111827; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); margin-bottom: 12px; }
+    .fund-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .fund-row label { font-size: 12px; color: #9ca3af; white-space: nowrap; }
+    .fund-row input { flex: 1; background: #111827; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 8px 10px; color: #fff; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -106,13 +120,32 @@ router.get("/modal", (req: Request, res: Response) => {
       <span class="security-badge">🔒 Secure</span>
     </div>
     <div id="checkout-view">
-      <img class="thumbnail" src="${media.thumbnail || ''}" alt="${media.title}" />
+      ${media.thumbnail ? `<img class="thumbnail" src="${media.thumbnail}" alt="${media.title}" />` : ''}
       <h2>${media.title}</h2>
       <div class="price">$${media.price.toFixed(2)}</div>
       <div class="balance">Your balance: <span>$${user.balance.toFixed(2)}</span></div>
       <div class="user-info">Paying as: ${user.name} (${user.email})</div>
-      ${!canAfford ? '<p style="color:#f87171;font-size:13px;margin-bottom:16px;">⚠ Insufficient balance. Please load funds first.</p>' : ''}
-      <button class="btn btn-pay" id="payBtn" ${canAfford ? '' : 'disabled'}>Pay $${media.price.toFixed(2)}</button>
+
+      ${canAfford ? `
+        <button class="btn btn-pay" id="payBtn">Pay $${media.price.toFixed(2)}</button>
+      ` : `
+        <p style="color:#f87171;font-size:13px;margin-bottom:4px;">
+          ⚠ You need $${shortfall.toFixed(2)} more to unlock this.
+        </p>
+        ${stripeKey ? `
+        <div class="divider">load funds with card</div>
+        <div class="fund-section">
+          <div class="fund-label">Card details (Stripe test: 4242 4242 4242 4242)</div>
+          <div id="card-element"></div>
+          <div class="fund-row">
+            <label>Amount $</label>
+            <input type="number" id="fundAmount" value="${suggestedLoad.toFixed(2)}" min="0.50" step="0.50" />
+          </div>
+          <button class="btn btn-pay" id="fundBtn">Load funds & unlock</button>
+        </div>
+        ` : '<p style="color:#f87171;font-size:13px;margin-top:12px;">Card payments not configured.</p>'}
+      `}
+
       <button class="btn btn-cancel" onclick="window.parent.postMessage({type:'contentpay:cancel'},'*')">Cancel</button>
       <p class="error" id="errorMsg"></p>
     </div>
@@ -123,40 +156,88 @@ router.get("/modal", (req: Request, res: Response) => {
     </div>
   </div>
   <script>
-    // The user token is held server-side — this modal page makes authenticated calls
-    // on behalf of the user. Creator JS cannot read this token (different origin).
     const USER_TOKEN = ${JSON.stringify(t)};
+    const MEDIA_ID   = ${JSON.stringify(cs.media_id)};
 
-    document.getElementById('payBtn').addEventListener('click', async () => {
-      const btn = document.getElementById('payBtn');
-      btn.disabled = true; btn.textContent = 'Processing…';
+    async function doPurchase() {
+      const btn = document.getElementById('payBtn') || document.getElementById('fundBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
       try {
         const res = await fetch('/api/purchase', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + USER_TOKEN,
-          },
-          body: JSON.stringify({ media_id: ${JSON.stringify(cs.media_id)} })
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + USER_TOKEN },
+          body: JSON.stringify({ media_id: MEDIA_ID }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Payment failed');
-
         document.getElementById('checkout-view').style.display = 'none';
         document.getElementById('success-view').style.display = 'block';
-
         setTimeout(() => {
-          window.parent.postMessage(
-            { type: 'contentpay:success', content_url: data.content_url },
-            '*'
-          );
+          window.parent.postMessage({ type: 'contentpay:success', content_url: data.content_url }, '*');
         }, 1200);
       } catch(e) {
         const err = document.getElementById('errorMsg');
         err.textContent = e.message; err.style.display = 'block';
-        btn.disabled = false; btn.textContent = 'Try Again';
+        if (btn) { btn.disabled = false; btn.textContent = 'Try Again'; }
+      }
+    }
+
+    ${canAfford ? `
+    document.getElementById('payBtn').addEventListener('click', doPurchase);
+    ` : stripeKey ? `
+    // ── Stripe card funding flow ──────────────────────────────────────────────
+    const stripe   = Stripe(${JSON.stringify(stripeKey)});
+    const elements = stripe.elements();
+    const card     = elements.create('card', {
+      style: { base: { color: '#fff', fontSize: '15px', '::placeholder': { color: '#6b7280' } } },
+    });
+    card.mount('#card-element');
+
+    document.getElementById('fundBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('fundBtn');
+      btn.disabled = true; btn.textContent = 'Processing card…';
+      const errEl = document.getElementById('errorMsg');
+      errEl.style.display = 'none';
+
+      try {
+        const amountUsd = parseFloat(document.getElementById('fundAmount').value);
+
+        // 1. Create PaymentIntent on server
+        const intentRes = await fetch('/api/stripe/create-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + USER_TOKEN },
+          body: JSON.stringify({ amount_usd: amountUsd }),
+        });
+        const intentData = await intentRes.json();
+        if (!intentRes.ok) throw new Error(intentData.error || 'Could not create payment intent');
+
+        // 2. Confirm card payment with Stripe.js
+        const { error } = await stripe.confirmCardPayment(intentData.client_secret, {
+          payment_method: { card },
+        });
+        if (error) throw new Error(error.message);
+
+        // 3. Poll until webhook has credited the wallet (up to 10s)
+        btn.textContent = 'Confirming deposit…';
+        let credited = false;
+        for (let i = 0; i < 10; i++) {
+          await new Promise(r => setTimeout(r, 1000));
+          const balRes = await fetch('/api/stripe/balance', {
+            headers: { 'Authorization': 'Bearer ' + USER_TOKEN },
+          });
+          const { balance } = await balRes.json();
+          if (balance >= ${media.price}) { credited = true; break; }
+        }
+        if (!credited) throw new Error('Deposit is still processing — please wait a moment and refresh.');
+
+        // 4. Balance confirmed — complete the purchase
+        await doPurchase();
+      } catch(e) {
+        errEl.textContent = e.message; errEl.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Load funds & unlock';
       }
     });
+    ` : ''}
   </script>
 </body>
 </html>`);

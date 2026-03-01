@@ -104,6 +104,16 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS stripe_deposits (
+    id                TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL REFERENCES users(id),
+    payment_intent_id TEXT UNIQUE NOT NULL,
+    amount_usd        REAL NOT NULL,
+    confirmed_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS timed_sessions (
     id             TEXT PRIMARY KEY,
     user_id        TEXT NOT NULL REFERENCES users(id),

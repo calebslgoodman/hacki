@@ -15,12 +15,21 @@ import accessRoutes from "./routes/access";
 import checkoutRoutes from "./routes/checkout";
 import timedRoutes from "./routes/timed";
 import solanaRoutes from "./routes/solana";
+import stripeRoutes, { stripeWebhookHandler } from "./routes/stripe";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors());
+
+// Stripe webhook MUST use raw body (before global express.json) for sig verification
+app.post(
+    "/api/stripe/webhook",
+    express.raw({ type: "application/json" }),
+    stripeWebhookHandler
+);
+
 app.use(express.json());
 
 // Serve the SDK and demo site as static files
@@ -40,16 +49,7 @@ app.use("/api/checkout", checkoutRoutes);
 app.use("/api/timed", timedRoutes);
 app.use("/api/solana", solanaRoutes);
 
-// ── STRIPE INTEGRATION POINT: Route Mounts ───────────────────────────────────
-// app.use("/api/stripe", stripeRoutes);
-//
-// Webhook must use express.raw() (not express.json()) so Stripe can verify
-// the payload signature:
-// app.post("/api/stripe/webhook",
-//   express.raw({ type: "application/json" }),
-//   stripeWebhookHandler
-// );
-// ─────────────────────────────────────────────────────────────────────────────
+app.use("/api/stripe", stripeRoutes);
 
 // The modal page is served directly (not under /api)
 app.get("/modal", (req, res) => {
