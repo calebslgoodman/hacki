@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard — ContentPay</title>
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+        .page { max-width:800px; margin:0 auto; padding:40px 24px 80px; }
+
+        /* Stats row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+        .stat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+        .stat-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: var(--dim);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .stat-value {
+            font-size: 26px;
+            font-weight: 900;
+            color: var(--text);
+        }
+        .stat-value.balance { color: #34d399; }
+        .stat-sub {
+            font-size: 11px;
+            color: var(--dim);
+            margin-top: 4px;
+            font-family: 'SF Mono', monospace;
+            word-break: break-all;
+        }
+
+        /* Section header */
+        .section-hd {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .section-hd h2 {
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .amount-wrap {
+            position: relative;
+            flex: 1;
+        }
+        .amount-prefix {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--dim);
+            font-size: 14px;
+            pointer-events: none;
+        }
+        .amount-wrap input {
+            padding-left: 24px;
+        }
+        .amount-wrap input:focus { outline: none; border-color: var(--violet); }
+
+        /* Purchases list */
+        .purchases-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .purchase-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+        }
+        .purchase-item:last-child { border-bottom: none; }
+        .purchase-thumb {
+            width: 52px;
+            height: 36px;
+            object-fit: cover;
+            border-radius: 6px;
+            background: var(--surface);
+            flex-shrink: 0;
+        }
+        .purchase-info { flex:1; min-width:0; }
+        .purchase-title {
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .purchase-meta { font-size: 12px; color: var(--dim); margin-top: 2px; }
+        .purchase-price {
+            font-size: 14px;
+            font-weight: 700;
+            color: #34d399;
+            flex-shrink: 0;
+        }
+        .empty-state {
+            padding: 48px 24px;
+            text-align: center;
+            color: var(--dim);
+        }
+        .empty-state p { margin-top: 10px; font-size: 14px; }
+
+        /* Profile panel */
+        .profile-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 22px;
+            margin-bottom: 28px;
+        }
+        .profile-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+        .profile-row:last-child { border-bottom: none; }
+        .profile-key { color: var(--dim); }
+        .profile-val { font-weight: 600; font-family: 'SF Mono', monospace; font-size: 13px; }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #1e1e2e;
+            border: 1px solid var(--border2);
+            border-radius: 10px;
+            padding: 12px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #34d399;
+            box-shadow: 0 8px 32px rgba(0,0,0,.4);
+            opacity: 0;
+            transform: translateY(8px);
+            transition: all .25s;
+            pointer-events: none;
+        }
+        .toast.show { opacity:1; transform:translateY(0); }
+
+        .page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .greeting { font-size: 28px; font-weight: 900; }
+        .greeting span { color: #c4b5fd; }
+
+        /* Solana card */
+        .solana-card {
+            background: linear-gradient(135deg, rgba(124,58,237,.12) 0%, rgba(20,241,149,.08) 100%);
+            border: 1px solid rgba(124,58,237,.35);
+            border-radius: var(--radius);
+            padding: 22px;
+            margin-bottom: 28px;
+        }
+        .solana-card h2 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+        .sol-price-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #14f195;
+            background: rgba(20,241,149,.12);
+            border: 1px solid rgba(20,241,149,.25);
+            border-radius: 20px;
+            padding: 3px 10px;
+            margin-left: 8px;
+        }
+        .wallet-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-family: 'SF Mono', monospace;
+            background: rgba(124,58,237,.2);
+            border: 1px solid rgba(124,58,237,.4);
+            border-radius: 20px;
+            padding: 4px 12px;
+            color: #c4b5fd;
+            margin-top: 10px;
+        }
+        .sol-presets {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 14px 0 10px;
+        }
+        .sol-preset-btn {
+            background: rgba(124,58,237,.15);
+            border: 1px solid rgba(124,58,237,.3);
+            border-radius: 8px;
+            color: #c4b5fd;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 14px;
+            cursor: pointer;
+            transition: background .15s;
+        }
+        .sol-preset-btn:hover { background: rgba(124,58,237,.3); }
+        .sol-preset-btn.active { background: var(--violet); border-color: var(--violet); color: #fff; }
+        .sol-input-row {
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+        }
+        .sol-input-row input { flex:1; }
+        #sol-status {
+            font-size: 13px;
+            margin-top: 10px;
+            min-height: 18px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="navbar-logo" style="text-decoration:none">
+            <div class="logo-gem">◆</div>
+            <span class="logo-text">ContentPay</span>
+        </a>
+        <div class="navbar-cta">
+            <button class="btn btn-ghost" onclick="logout()">Log out</button>
+        </div>
+    </nav>
+
+    <div class="page">
+
+        <!-- Header -->
+        <div class="page-header">
+            <div>
+                <div class="greeting">Hey, <span id="user-name">—</span> 👋</div>
+                <div style="color:var(--dim);font-size:14px;margin-top:4px">Your ContentPay dashboard</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <div class="badge badge-violet" style="font-size:11px;padding:5px 12px">User account</div>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-label">💳 Wallet Balance</div>
+                <div class="stat-value balance" id="stat-balance">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📦 Purchases</div>
+                <div class="stat-value" id="stat-purchases">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">🆔 User ID</div>
+                <div class="stat-value" style="font-size:13px;font-family:monospace" id="stat-uid">—</div>
+                <div class="stat-sub" id="stat-wallet-id"></div>
+            </div>
+        </div>
+
+        <!-- Solana / Phantom funding -->
+        <div class="solana-card" id="solana-section">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+                <h2>◎ Fund with Solana</h2>
+                <span class="sol-price-badge" id="sol-price-badge">loading…</span>
+            </div>
+            <p style="font-size:13px;color:var(--muted)">Send SOL from your Phantom wallet — instantly converted to USD and credited to your balance.</p>
+
+            <div id="phantom-connect-area">
+                <button class="btn btn-primary" id="phantom-btn" onclick="connectPhantom()" style="margin-top:12px;background:linear-gradient(135deg,#7c3aed,#9333ea)">
+                    🦋 Connect Phantom
+                </button>
+                <div style="font-size:12px;color:var(--dim);margin-top:8px">
+                    Don't have Phantom? <a href="https://phantom.app" target="_blank" style="color:#c4b5fd">Install it free →</a>
+                </div>
+            </div>
+
+            <div id="phantom-fund-area" style="display:none">
+                <div class="wallet-pill" id="wallet-pill">⬛ not connected</div>
+                <div class="sol-presets" id="sol-presets">
+                    <button class="sol-preset-btn" onclick="selectPreset(this, 5)">$5</button>
+                    <button class="sol-preset-btn" onclick="selectPreset(this, 10)">$10</button>
+                    <button class="sol-preset-btn" onclick="selectPreset(this, 25)">$25</button>
+                    <button class="sol-preset-btn" onclick="selectPreset(this, 50)">$50</button>
+                </div>
+                <div class="sol-input-row">
+                    <div class="amount-wrap">
+                        <span class="amount-prefix">$</span>
+                        <input class="form-input" id="sol-usd-amount" type="number" min="0.01" step="0.01"
+                               placeholder="Custom USD amount" style="width:100%;padding-left:24px" oninput="clearPreset()" />
+                    </div>
+                    <button class="btn btn-primary" id="sol-fund-btn" onclick="fundWithSOL()"
+                            style="background:linear-gradient(135deg,#14f195,#09b06a);color:#000;font-weight:700">
+                        ◎ Fund
+                    </button>
+                </div>
+                <div id="sol-status"></div>
+            </div>
+        </div>
+
+        <!-- Profile info -->
+        <div style="margin-bottom:28px">
+            <div class="section-hd"><h2>👤 Account info</h2></div>
+            <div class="profile-card">
+                <div class="profile-row">
+                    <span class="profile-key">Name</span>
+                    <span class="profile-val" id="info-name">—</span>
+                </div>
+                <div class="profile-row">
+                    <span class="profile-key">Email</span>
+                    <span class="profile-val" id="info-email">—</span>
+                </div>
+                <div class="profile-row">
+                    <span class="profile-key">User ID</span>
+                    <span class="profile-val" id="info-uid">—</span>
+                </div>
+                <div class="profile-row">
+                    <span class="profile-key">Wallet ID</span>
+                    <span class="profile-val" id="info-wallet">—</span>
+                </div>
+                <div class="profile-row">
+                    <span class="profile-key">Member since</span>
+                    <span class="profile-val" id="info-since">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Purchases -->
+        <div class="section-hd"><h2>🧾 Purchase history</h2></div>
+        <div class="purchases-card" id="purchases-container">
+            <div class="empty-state">
+                <div style="font-size:36px">🎬</div>
+                <p>No purchases yet.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const API = 'http://localhost:4000';
+        const token  = sessionStorage.getItem('cp_token');
+        const userId = sessionStorage.getItem('cp_user_id');
+
+        if (!token || !userId) {
+            window.location.href = '/login.html';
+        }
+
+        // ── Load data ──────────────────────────────────────────────────────
+        async function loadDashboard() {
+            try {
+                const [profileRes, purchasesRes] = await Promise.all([
+                    fetch(`${API}/api/users/${userId}`),
+                    fetch(`${API}/api/users/${userId}/purchases`),
+                ]);
+
+                if (profileRes.status === 401 || profileRes.status === 403) {
+                    logout(); return;
+                }
+
+                const profile   = await profileRes.json();
+                const purchases = await purchasesRes.json();
+
+                // Header
+                document.getElementById('user-name').textContent = profile.name.split(' ')[0];
+
+                // Stats
+                document.getElementById('stat-balance').textContent   = '$' + Number(profile.balance).toFixed(2);
+                document.getElementById('stat-purchases').textContent  = purchases.total ?? purchases.purchases?.length ?? 0;
+                document.getElementById('stat-uid').textContent        = profile.id;
+                document.getElementById('stat-wallet-id').textContent  = profile.wallet_id ?? '';
+
+                // Profile panel
+                document.getElementById('info-name').textContent  = profile.name;
+                document.getElementById('info-email').textContent  = profile.email;
+                document.getElementById('info-uid').textContent   = profile.id;
+                document.getElementById('info-wallet').textContent = profile.wallet_id ?? '—';
+                document.getElementById('info-since').textContent  = profile.created_at
+                    ? new Date(profile.created_at).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
+                    : '—';
+
+                // Purchases
+                const list = purchases.purchases ?? [];
+                const container = document.getElementById('purchases-container');
+                if (list.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div style="font-size:36px">🎬</div>
+                            <p>No purchases yet. Use the API to buy media!</p>
+                            <p style="margin-top:8px;font-size:12px;color:var(--dim)">
+                                POST ${API}/api/purchase with your user_id and a media_id
+                            </p>
+                        </div>`;
+                } else {
+                    container.innerHTML = list.map(p => `
+                        <div class="purchase-item">
+                            ${p.thumbnail
+                                ? `<img class="purchase-thumb" src="${escHtml(p.thumbnail)}" alt="" />`
+                                : `<div class="purchase-thumb"></div>`}
+                            <div class="purchase-info">
+                                <div class="purchase-title">${escHtml(p.title)}</div>
+                                <div class="purchase-meta">by ${escHtml(p.creator_name)} · ${formatDate(p.purchased_at)}</div>
+                            </div>
+                            <div class="purchase-price">$${Number(p.price).toFixed(2)}</div>
+                        </div>`).join('');
+                }
+
+            } catch (err) {
+                showToast('Failed to load data: ' + err.message, 'error');
+            }
+        }
+
+        // ── Logout ─────────────────────────────────────────────────────────
+        async function logout() {
+            try {
+                await fetch(`${API}/api/auth/logout`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+            } catch {}
+            sessionStorage.clear();
+            window.location.href = '/login.html';
+        }
+
+        // ── Utils ──────────────────────────────────────────────────────────
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function escHtml(s) {
+            return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function formatDate(str) {
+            if (!str) return '—';
+            return new Date(str).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+        }
+
+        loadDashboard();
+        loadSolPrice();
+
+        // ── Solana / Phantom ───────────────────────────────────────────────
+
+        let _solPrice = 0;
+        let _selectedPresetUSD = 0;
+
+        async function loadSolPrice() {
+            try {
+                const r = await fetch(`${API}/api/solana/price`);
+                const d = await r.json();
+                _solPrice = d.sol_usd;
+                document.getElementById('sol-price-badge').textContent =
+                    `1 SOL ≈ $${Number(_solPrice).toFixed(2)}`;
+            } catch {
+                document.getElementById('sol-price-badge').textContent = 'price unavailable';
+            }
+        }
+
+        function selectPreset(btn, usd) {
+            document.querySelectorAll('.sol-preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _selectedPresetUSD = usd;
+            document.getElementById('sol-usd-amount').value = usd.toFixed(2);
+        }
+
+        function clearPreset() {
+            _selectedPresetUSD = 0;
+            document.querySelectorAll('.sol-preset-btn').forEach(b => b.classList.remove('active'));
+        }
+
+        async function connectPhantom() {
+            const btn = document.getElementById('phantom-btn');
+            if (!window.solana?.isPhantom) {
+                setSolStatus('⚠️ Phantom not found. <a href="https://phantom.app" target="_blank" style="color:#c4b5fd">Install Phantom →</a>', 'warn');
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = 'Connecting…';
+            try {
+                const resp = await window.solana.connect();
+                const addr = resp.publicKey.toString();
+
+                // Link wallet to user account
+                await fetch(`${API}/api/solana/connect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ wallet_address: addr }),
+                });
+
+                document.getElementById('wallet-pill').textContent =
+                    '🟣 ' + addr.slice(0, 4) + '…' + addr.slice(-4);
+                document.getElementById('phantom-connect-area').style.display = 'none';
+                document.getElementById('phantom-fund-area').style.display = 'block';
+            } catch (err) {
+                setSolStatus('Connection cancelled or failed: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = '🦋 Connect Phantom';
+            }
+        }
+
+        async function fundWithSOL() {
+            if (!window.solanaWeb3) {
+                setSolStatus('⚠️ Solana library not loaded. Please refresh the page.', 'error');
+                return;
+            }
+            const usdAmount = parseFloat(document.getElementById('sol-usd-amount').value);
+            if (isNaN(usdAmount) || usdAmount <= 0) {
+                setSolStatus('Please enter a valid USD amount.', 'error');
+                return;
+            }
+            if (_solPrice <= 0) {
+                setSolStatus('SOL price not loaded. Please wait a moment and try again.', 'error');
+                return;
+            }
+            if (!window.solana?.publicKey) {
+                setSolStatus('Wallet not connected.', 'error');
+                return;
+            }
+
+            const solAmount = usdAmount / _solPrice;
+            const btn = document.getElementById('sol-fund-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Waiting…';
+            setSolStatus(`Sending ${solAmount.toFixed(6)} SOL (~$${usdAmount.toFixed(2)})…`, 'info');
+
+            try {
+                const web3 = window.solanaWeb3;
+
+                // Get platform wallet from server
+                const configRes = await fetch(`${API}/api/solana/config`);
+                const config = await configRes.json();
+
+                // Build transaction
+                // Use our own web3.PublicKey instances (not Phantom's cross-bundle ones)
+                // to avoid Buffer serialization issues across different IIFE bundles.
+                const userPubkey = new web3.PublicKey(window.solana.publicKey.toString());
+                const connection = new web3.Connection(config.network, 'confirmed');
+                const latestBlock = await connection.getLatestBlockhash();
+                const tx = new web3.Transaction({
+                    recentBlockhash: latestBlock.blockhash,
+                    feePayer: userPubkey,
+                }).add(web3.SystemProgram.transfer({
+                    fromPubkey: userPubkey,
+                    toPubkey:   new web3.PublicKey(config.wallet),
+                    lamports:   Math.round(solAmount * web3.LAMPORTS_PER_SOL),
+                }));
+
+                // Phantom signs + broadcasts
+                setSolStatus('🦋 Approve the transaction in Phantom…', 'info');
+                const { signature } = await window.solana.signAndSendTransaction(tx);
+                setSolStatus('⏳ Confirming on Solana devnet…', 'info');
+
+                // Use strategy-based confirmation (not the deprecated string form)
+                await connection.confirmTransaction({
+                    signature,
+                    blockhash: latestBlock.blockhash,
+                    lastValidBlockHeight: latestBlock.lastValidBlockHeight,
+                });
+
+                // Tell server to verify + credit
+                const depRes = await fetch(`${API}/api/solana/deposit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ tx_signature: signature, expected_sol: solAmount }),
+                });
+                const dep = await depRes.json();
+                if (!depRes.ok) throw new Error(dep.error || 'Deposit failed.');
+
+                // Update balance display
+                document.getElementById('stat-balance').textContent = '$' + Number(dep.new_balance).toFixed(2);
+                setSolStatus(`✅ $${Number(dep.usd_credited).toFixed(2)} added to your balance! (${Number(dep.sol_received).toFixed(6)} SOL @ $${Number(dep.sol_price).toFixed(2)})`, 'success');
+                document.getElementById('sol-usd-amount').value = '';
+                clearPreset();
+                showToast(`◎ Funded! $${Number(dep.usd_credited).toFixed(2)} added via Solana`);
+            } catch (err) {
+                if (err.message.includes('rejected') || err.message.includes('cancelled') || err.code === 4001) {
+                    setSolStatus('Transaction cancelled.', 'warn');
+                } else {
+                    setSolStatus('Error: ' + err.message, 'error');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '◎ Fund';
+            }
+        }
+
+        function setSolStatus(html, type) {
+            const el = document.getElementById('sol-status');
+            const colors = { info: '#a78bfa', success: '#34d399', error: '#f87171', warn: '#fbbf24' };
+            el.style.color = colors[type] || '#a78bfa';
+            el.innerHTML = html;
+        }
+
+        // Re-connect Phantom automatically if already approved
+        if (window.solana?.isPhantom) {
+            window.solana.connect({ onlyIfTrusted: true }).then(resp => {
+                const addr = resp.publicKey.toString();
+                document.getElementById('wallet-pill').textContent =
+                    '🟣 ' + addr.slice(0, 4) + '…' + addr.slice(-4);
+                document.getElementById('phantom-connect-area').style.display = 'none';
+                document.getElementById('phantom-fund-area').style.display = 'block';
+            }).catch(() => {}); // Not previously approved — show connect button
+        }
+    </script>
+    <!-- Node.js globals needed by @solana/web3.js IIFE bundle -->
+    <script>window.global = window; window.process = window.process || { env: {}, version: '' };</script>
+    <!-- Buffer polyfill must be loaded before web3.js (Solana Cookbook pattern for vanilla JS) -->
+    <script src="https://bundle.run/buffer@6.0.3"></script>
+    <script>window.Buffer = buffer.Buffer;</script>
+    <script src="https://unpkg.com/@solana/web3.js@1.95.8/lib/index.iife.min.js"
+            onload="window.solanaWeb3 = solanaWeb3"></script>
+</body>
+</html>
